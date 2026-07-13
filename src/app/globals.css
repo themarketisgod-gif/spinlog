@@ -1,0 +1,110 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+html {
+  color-scheme: dark;
+}
+
+::selection {
+  background: #C9974B;
+  color: #12161D;
+}
+
+body {
+  background-image:
+    radial-gradient(ellipse 80% 50% at 50% -10%, rgba(201, 151, 75, 0.08), transparent);
+}
+
+/* Tape-counter style digit display — the signature stat element */
+.tape-counter {
+  display: inline-flex;
+  font-family: var(--font-plex-mono);
+  font-variant-numeric: tabular-nums;
+  background: #0D1015;
+  border-radius: 6px;
+  padding: 6px 4px;
+  box-shadow: inset 0 2px 6px rgba(0, 0, 0, 0.6), inset 0 -1px 0 rgba(255, 255, 255, 0.04);
+  border: 1px solid #2E3644;
+}
+
+.tape-counter .digit {
+  display: inline-block;
+  width: 0.62em;
+  text-align: center;
+  color: #E7E3D6;
+  padding: 0 2px;
+  position: relative;
+}
+
+.tape-counter .digit + .digit {
+  border-left: 1px solid #232a35;
+}
+
+.ledger-row {
+  border-bottom: 1px solid #2E3644;
+}
+
+.ledger-row:last-child {
+  border-bottom: none;
+}
+
+/* Five-star tracks get a warm pulsing glow so they visually stand out
+   when scanning a list, not just a filled row of stars. */
+@keyframes glow-pulse {
+  0%, 100% { box-shadow: 0 0 6px 0 rgba(201, 151, 75, 0.35), 0 0 0 1px rgba(201, 151, 75, 0.3) inset; }
+  50% { box-shadow: 0 0 16px 2px rgba(201, 151, 75, 0.6), 0 0 0 1px rgba(201, 151, 75, 0.5) inset; }
+}
+
+.rating-glow {
+  border-radius: 8px;
+  animation: glow-pulse 2.4s ease-in-out infinite;
+}
+
+@keyframes glow-pulse-signal {
+  0%, 100% { box-shadow: 0 0 6px 0 rgba(111, 168, 143, 0.35), 0 0 0 1px rgba(111, 168, 143, 0.3) inset; }
+  50% { box-shadow: 0 0 14px 2px rgba(111, 168, 143, 0.5), 0 0 0 1px rgba(111, 168, 143, 0.45) inset; }
+}
+
+.rating-glow-mid {
+  border-radius: 8px;
+  animation: glow-pulse-signal 2.4s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .rating-glow-mid {
+    animation: none;
+    box-shadow: 0 0 10px 1px rgba(111, 168, 143, 0.45), 0 0 0 1px rgba(111, 168, 143, 0.35) inset;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .rating-glow {
+    animation: none;
+    box-shadow: 0 0 10px 1px rgba(201, 151, 75, 0.5), 0 0 0 1px rgba(201, 151, 75, 0.4) inset;
+  }
+}
+
+/* Disliked tracks get an unmissable tag, not just a small icon */
+.disliked-row {
+  border-radius: 8px;
+  box-shadow: 0 0 0 1px rgba(196, 105, 75, 0.4) inset;
+}
+
+a {
+  color: inherit;
+}
+
+/* Respect reduced motion */
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+  }
+}
+
+:focus-visible {
+  outline: 2px solid #C9974B;
+  outline-offset: 2px;
+}

@@ -1,0 +1,282 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id            String   @id @default(cuid())
+  username      String   @unique
+  name          String?
+  email         String?  @unique
+  image         String?
+  spotifyId     String?  @unique
+  createdAt     DateTime @default(now())
+
+  accessToken   String?  @db.Text
+  refreshToken  String?  @db.Text
+  tokenExpires  DateTime?
+
+  // Customization
+  bio           String?
+  themeColor    String   @default("#C9974B")
+  timezone      String   @default("UTC")
+  locationName  String?
+  locationLat   Float?
+  locationLon   Float?
+  tempUnit      String   @default("F") // "F" | "C"
+  lastfmUsername String?
+  layoutPreferences Json?
+  factsArtistName String?
+  bannerImage    String?  @db.Text
+  pinnedType    String?  // "artist" | "track" | "album"
+  pinnedLabel   String?
+  pinnedSublabel String?
+  pinnedArt     String?
+
+  plays         Play[]
+  following     Friendship[] @relation("Follower")
+  followedBy    Friendship[] @relation("Followed")
+  comments      Comment[]
+  reactions     Reaction[]
+  sentRecs      Recommendation[] @relation("RecFrom")
+  receivedRecs  Recommendation[] @relation("RecTo")
+  ratings       Rating[]
+  tags          Tag[]
+  groupPlaylists GroupPlaylist[]
+  concerts      Concert[]
+  physicalMedia PhysicalMedia[]
+}
+
+model Play {
+  id          String   @id @default(cuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  trackName   String
+  artistName  String
+  artistNames String[] @default([]) // every credited artist, for collaboration stats — artistName stays the display string
+  albumName   String?
+  albumArt    String?
+  durationMs  Int?
+  spotifyUri  String?
+  primaryArtistId String? // Spotify artist ID of the first artist, used for genre lookups
+  releaseYear Int?     // year the track's album was released, for decade breakdowns
+
+  source      String   @default("manual") // "spotify" | "manual" | "library" | "lastfm"
+  manualSource String? // for "manual": platform name. for "lastfm": "scrobble" | "loved"
+  mood        String?  // freeform-ish, from a fixed picker: "happy" | "sad" | "hype" | "chill" | "heartbroken" | "angry" | "focus" | "love"
+  playedAt    DateTime @default(now())
+  createdAt   DateTime @default(now())
+
+  comments    Comment[]
+  reactions   Reaction[]
+
+  @@index([userId, playedAt])
+  @@unique([userId, spotifyUri, playedAt])
+}
+
+model Friendship {
+  id          String   @id @default(cuid())
+  followerId  String
+  followedId  String
+  createdAt   DateTime @default(now())
+
+  follower    User @relation("Follower", fields: [followerId], references: [id], onDelete: Cascade)
+  followed    User @relation("Followed", fields: [followedId], references: [id], onDelete: Cascade)
+
+  @@unique([followerId, followedId])
+}
+
+model Comment {
+  id        String   @id @default(cuid())
+  playId    String
+  play      Play     @relation(fields: [playId], references: [id], onDelete: Cascade)
+  authorId  String
+  author    User     @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  body      String
+  createdAt DateTime @default(now())
+
+  @@index([playId])
+}
+
+model Reaction {
+  id        String   @id @default(cuid())
+  playId    String
+  play      Play     @relation(fields: [playId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  emoji     String   @default("🔥")
+  createdAt DateTime @default(now())
+
+  @@unique([playId, userId])
+}
+
+model Recommendation {
+  id          String    @id @default(cuid())
+  fromUserId  String
+  fromUser    User      @relation("RecFrom", fields: [fromUserId], references: [id], onDelete: Cascade)
+  toUserId    String
+  toUser      User      @relation("RecTo", fields: [toUserId], references: [id], onDelete: Cascade)
+
+  trackName   String
+  artistName  String
+  albumArt    String?
+  spotifyUri  String?
+  message     String?
+
+  createdAt   DateTime  @default(now())
+  loggedAt    DateTime?
+  dismissedAt DateTime?
+
+  @@index([toUserId])
+}
+
+model Rating {
+  id         String   @id @default(cuid())
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  trackName  String
+  artistName String
+  albumArt   String?
+  rating     Int      @default(0) // 1-5, or 0 if only disliked
+  disliked   Boolean  @default(false)
+  note       String?  @db.Text // freeform personal notes about this track
+  updatedAt  DateTime @updatedAt
+  createdAt  DateTime @default(now())
+
+  @@unique([userId, trackName, artistName])
+}
+
+model Tag {
+  id         String   @id @default(cuid())
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  targetType String   // "artist" | "track"
+  artistName String
+  trackName  String   @default("") // empty string for artist-level tags
+  tag        String
+  createdAt  DateTime @default(now())
+
+  @@unique([userId, targetType, artistName, trackName, tag])
+  @@index([tag])
+}
+
+model GroupPlaylist {
+  id                String   @id @default(cuid())
+  creatorId         String
+  creator           User     @relation(fields: [creatorId], references: [id], onDelete: Cascade)
+
+  name              String
+  spotifyPlaylistId String
+  spotifyUrl        String
+  createdAt         DateTime @default(now())
+
+  @@index([creatorId])
+}
+
+// Shared, app-wide cache of MusicBrainz genre tags (and a rough Wikidata
+// fame signal) per artist — not user-specific, since this data is the same
+// for everyone. This avoids hitting MusicBrainz's 1-request/second limit
+// repeatedly for the same artist across different users' page loads.
+model ArtistMetadataCache {
+  id                String   @id @default(cuid())
+  artistName        String   @unique
+  mbid              String?
+  tags              String[] @default([])
+  wikidataQid       String?
+  wikidataSitelinks Int?     // number of Wikipedia language editions with an article — rough global fame proxy
+  country           String?  // ISO country code, from MusicBrainz's core artist data
+  areaName          String?  // human-readable area/city/country name
+  formedYear        Int?     // life-span.begin year, from MusicBrainz's core artist data
+  members           Json?    // band member relationships from MusicBrainz: [{name, mbid, begin, end, current}]
+  fetchedAt         DateTime @default(now())
+}
+
+model Concert {
+  id            String   @id @default(cuid())
+  userId        String
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  artistName    String
+  venueName     String?
+  city          String?
+  eventDate     DateTime
+  setlistFmId   String?  // present if imported from setlist.fm, null for manual entries
+  setlistFmUrl  String?
+  source        String   @default("manual") // "setlistfm" | "manual"
+  createdAt     DateTime @default(now())
+
+  songs         ConcertSong[]
+
+  @@index([userId, artistName])
+}
+
+model ConcertSong {
+  id         String  @id @default(cuid())
+  concertId  String
+  concert    Concert @relation(fields: [concertId], references: [id], onDelete: Cascade)
+
+  trackName  String
+  position   Int
+  isEncore   Boolean @default(false)
+
+  @@index([concertId])
+}
+
+model PhysicalMedia {
+  id              String   @id @default(cuid())
+  userId          String
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  artistName      String
+  releaseTitle    String
+  format          String   // "Vinyl" | "CD" | "Cassette" | "Other"
+  year            Int?
+  coverArt        String?
+  discogsReleaseId String?
+  discogsUrl      String?
+  source          String   @default("manual") // "discogs" | "manual"
+  createdAt       DateTime @default(now())
+
+  tracks          PhysicalMediaTrack[]
+
+  @@index([userId, artistName])
+}
+
+model PhysicalMediaTrack {
+  id              String        @id @default(cuid())
+  physicalMediaId String
+  physicalMedia   PhysicalMedia @relation(fields: [physicalMediaId], references: [id], onDelete: Cascade)
+
+  trackName       String
+  position        Int
+
+  @@index([physicalMediaId])
+}
+
+// Shared cache of daily weather, keyed by rounded coordinates + date, so
+// two users in roughly the same place don't each trigger a separate
+// lookup for the same day. Open-Meteo's historical archive needs no API
+// key and returns whole date ranges in a single fast call, so this is
+// mostly about being a good citizen rather than working around a strict
+// rate limit like MusicBrainz's.
+model WeatherDayCache {
+  id              String @id @default(cuid())
+  lat             Float  // rounded to 2 decimal places (~1km) at write time
+  lon             Float
+  date            String // "YYYY-MM-DD"
+  tempMaxC        Float?
+  tempMinC        Float?
+  precipitationMm Float?
+  weatherCode     Int?   // WMO weather interpretation code
+  sunrise         String? // ISO datetime string, local to the location
+  sunset          String? // ISO datetime string, local to the location
+
+  @@unique([lat, lon, date])
+}
